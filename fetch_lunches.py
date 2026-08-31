@@ -1,76 +1,37 @@
-import json
-import re
-import requests
-from bs4 import BeautifulSoup
+name: Update Lunch Menus
 
-ravintolat = [
-    {
-        "id": "treffi",
-        "nimi": "Treffi Pub & Bistro",
-        "url": "https://treffipub.com/menu/lounas/"
-    },
-    {
-        "id": "herkku",
-        "nimi": "Ravintola Herkku",
-        "url": "https://ravintolaherkku.fi"
-    },
-    {
-        "id": "factory",
-        "nimi": "Ravintola Factory Roihupelto",
-        "url": "https://ravintolafactory.com/lounasravintolat/ravintolat/helsinki-roihupelto/"
-    }
-]
+on:
+  schedule:
+    - cron: '0 6 * * 1-5'
+  workflow_dispatch:
 
-headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-}
+permissions:
+  contents: write
 
-def parsi_tiistai(text):
-    lines = [line.strip() for line in text.split('\n') if line.strip()]
-    tiistai_rivit = []
-    tallenna = False
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-    for line in lines:
-        if re.search(r'tiistai|ti\s*\d+', line, re.IGNORECASE):
-            tallenna = True
-            tiistai_rivit.append(line)
-            continue
-        if tallenna and re.search(r'keskiviikko|ke\s*\d+', line, re.IGNORECASE):
-            break
-        if tallenna and len(line) > 3:
-            tiistai_rivit.append(line)
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-    return tiistai_rivit if tiistai_rivit else ["Lounaslistaa ei saatu suodatettua automaattisesti."]
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
 
-tulokset = []
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests beautifulsoup4
 
-for r in ravintolat:
-    try:
-        response = requests.get(r['url'], headers=headers, timeout=15)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # Poistetaan roskat
-        for s in soup(['script', 'style', 'nav', 'footer', 'header']):
-            s.decompose()
+    - name: Run fetch script
+      run: python fetch_lunches.py
 
-        text = soup.get_text(separator='\n')
-        lounaat = parsi_tiistai(text)
-
-        tulokset.append({
-            "nimi": r['nimi'],
-            "url": r['url'],
-            "lounaat": lounaat,
-            "status": "ok"
-        })
-    except Exception as e:
-        tulokset.append({
-            "nimi": r['nimi'],
-            "url": r['url'],
-            "lounaat": [f"Virhe haettaessa: {str(e)}"],
-            "status": "error"
-        })
-
-with open('lounaat.json', 'w', encoding='utf-8') as f:
-    json.dump(tulokset, f, ensure_ascii=False, indent=2)
-
-print("lounaat.json luotu onnistuneesti.")
+    - name: Commit and push changes
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        git add lounaat.json
+        git diff-index --quiet HEAD || (git commit -m "Update lounaat.json" && git push)
