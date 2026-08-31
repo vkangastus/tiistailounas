@@ -5,215 +5,47 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tiistain Lounaslistat</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f4f4f9;
-            color: #333;
-            margin: 0;
-            padding: 20px;
-        }
-        h1 {
-            text-align: center;
-            color: #2c3e50;
-        }
-        .controls {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        button {
-            background-color: #3498db;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            font-size: 16px;
-            cursor: pointer;
-            border-radius: 5px;
-        }
-        button:hover {
-            background-color: #2980b9;
-        }
-        .container {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-            gap: 20px;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        .card {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            max-height: 500px;
-            overflow-y: auto;
-        }
-        .card h2 {
-            font-size: 1.2rem;
-            color: #2980b9;
-            border-bottom: 2px solid #eee;
-            padding-bottom: 8px;
-            margin-top: 0;
-        }
-        .loading {
-            text-align: center;
-            font-style: italic;
-            color: #7f8c8d;
-        }
-        .error {
-            color: #e74c3c;
-        }
-        ul {
-            padding-left: 20px;
-            margin: 10px 0;
-        }
-        li {
-            margin-bottom: 6px;
-            line-height: 1.4;
-        }
+        body { font-family: Arial, sans-serif; background-color: #f4f4f9; color: #333; padding: 20px; }
+        h1 { text-align: center; color: #2c3e50; }
+        .container { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; max-width: 1200px; margin: 20px auto; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .card h2 { color: #2980b9; border-bottom: 2px solid #eee; padding-bottom: 8px; margin-top: 0; }
+        ul { padding-left: 20px; }
+        li { margin-bottom: 6px; line-height: 1.4; }
+        a { color: #2980b9; text-decoration: none; }
     </style>
 </head>
 <body>
 
-    <h1>Tiistain Lounaslistat</h1>
-    <div class="controls">
-        <button onclick="haeLounaat()">Päivitä lounaslistat</button>
-    </div>
-
-    <div class="container" id="lunch-container"></div>
+    <h1>Tiistain Lounaat</h1>
+    <div class="container" id="lunch-container">Ladataan...</div>
 
     <script>
-        const ravintolat = [
-            {
-                nimi: "Treffi Pub & Bistro",
-                url: "https://treffipub.com/menu/lounas/",
-                parser: parsiTreffi
-            },
-            {
-                nimi: "Ravintola Herkku",
-                url: "https://ravintolaherkku.fi",
-                parser: parsiYleinenTiistai
-            },
-            {
-                nimi: "Ravintola Factory Roihupelto",
-                url: "https://ravintolafactory.com/lounasravintolat/ravintolat/helsinki-roihupelto/",
-                parser: parsiFactory
-            }
-        ];
-
-        async function haeLounaat() {
+        async function lataaLounaat() {
             const container = document.getElementById('lunch-container');
-            container.innerHTML = '';
-
-            for (let ravintola of ravintolat) {
-                const card = document.createElement('div');
-                card.className = 'card';
-                card.innerHTML = `<h2>${ravintola.nimi}</h2><div class="loading">Noudetaan lounaslistaa...</div>`;
-                container.appendChild(card);
-
-                try {
-                    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(ravintola.url)}`;
-                    const response = await fetch(proxyUrl);
-                    const data = await response.json();
-
-                    if (data.contents) {
-                        const parser = new DOMParser();
-                        const doc = parser.parseFromString(data.contents, 'text/html');
-                        
-                        // Kutsutaan ravintolakohtaista jäsentäjää
-                        const tulosHtml = ravintola.parser(doc);
-                        card.innerHTML = `<h2>${ravintola.nimi}</h2>` + tulosHtml;
-                    } else {
-                        card.innerHTML = `<h2>${ravintola.nimi}</h2><p class="error">Ei saatu yhteyttä sivustoon.</p>`;
-                    }
-                } catch (error) {
-                    console.error(error);
-                    card.innerHTML = `<h2>${ravintola.nimi}</h2><p class="error">Virhe ladattaessa lounaslistaa.</p>`;
-                }
+            try {
+                // Haetaan staattinen lounaat.json (välimuistin ohitus cache-bustingilla)
+                const res = await fetch(`lounaat.json?t=${Date.now()}`);
+                const data = await res.json();
+                
+                container.innerHTML = '';
+                data.forEach(item => {
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    
+                    const listItems = item.lounaat.map(l => `<li>${l}</li>`).join('');
+                    card.innerHTML = `
+                        <h2><a href="${item.url}" target="_blank">${item.nimi}</a></h2>
+                        <ul>${listItems}</ul>
+                    `;
+                    container.appendChild(card);
+                });
+            } catch (err) {
+                container.innerHTML = '<p style="color:red;">Lounaslistojen lataus epäonnistui.</p>';
             }
         }
 
-        // Treffi Pub käyttää samaa viikottaista lounaslistaa joka päivälle
-        function parsiTreffi(doc) {
-            // Etsitään ruokalistaelementtejä
-            const items = doc.querySelectorAll('.menu-item, .food-item, p, li');
-            let annokset = [];
-            
-            items.forEach(el => {
-                const txt = el.textContent.trim();
-                // Suodatetaan lyhyet tekstit ja navigaatiot pois
-                if (txt.length > 15 && txt.length < 200 && (txt.includes('L,') || txt.includes('G,') || txt.includes('M,'))) {
-                    if (!annokset.includes(txt)) annokset.push(txt);
-                }
-            });
-
-            if (annokset.length > 0) {
-                return '<ul>' + annokset.map(a => `<li>${a}</li>`).join('') + '</ul>';
-            }
-            return parsiYleinenTiistai(doc);
-        }
-
-        // Factory-ravintoloiden HTML-rakenteen parsiminen Tiistaille
-        function parsiFactory(doc) {
-            const elements = Array.from(doc.querySelectorAll('h3, h4, h5, div, p, strong'));
-            let tiistaiElement = elements.find(el => el.textContent.trim().match(/^tiistai/i));
-
-            if (tiistaiElement) {
-                let current = tiistaiElement.nextElementSibling || tiistaiElement.parentElement;
-                let ruoat = [];
-                let count = 0;
-
-                // Kerätään seuraavat 10 elementtiä tai kunnes vastaan tulee keskiviikko
-                while (current && count < 10) {
-                    const txt = current.textContent.trim();
-                    if (txt.match(/^keskiviikko/i)) break;
-                    if (txt.length > 5) {
-                        ruoat.push(txt);
-                    }
-                    current = current.nextElementSibling;
-                    count++;
-                }
-
-                if (ruoat.length > 0) {
-                    return '<ul>' + ruoat.map(r => `<li>${r}</li>`).join('') + '</ul>';
-                }
-            }
-            return parsiYleinenTiistai(doc);
-        }
-
-        // Yleinen fallback tiistai-sanan ja sen lähiympäristön etsimiseen
-        function parsiYleinenTiistai(doc) {
-            // Poistetaan turhat scriptit ja tyylit
-            doc.querySelectorAll('script, style, nav, footer, header').forEach(el => el.remove());
-
-            const bodyText = doc.body ? doc.body.textContent : '';
-            const lines = bodyText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-            
-            let tiistaiRivit = [];
-            let tallenna = false;
-
-            for (let line of lines) {
-                if (line.match(/tiistai|ti\s*\d+/i)) {
-                    tallenna = true;
-                    tiistaiRivit.push(`<strong>${line}</strong>`);
-                    continue;
-                }
-                if (tallenna && line.match(/keskiviikko|ke\s*\d+/i)) {
-                    break;
-                }
-                if (tallenna) {
-                    // Jätetään erittäin lyhyet roskat pois
-                    if (line.length > 3) tiistaiRivit.push(line);
-                }
-            }
-
-            if (tiistaiRivit.length > 0) {
-                return '<ul>' + tiistaiRivit.map(r => `<li>${r}</li>`).join('') + '</ul>';
-            }
-
-            return '<p class="error">Tiistain lounaslistaa ei saatu noudettua automaattisesti.</p>';
-        }
-
-        window.onload = haeLounaat;
+        window.onload = lataaLounaat;
     </script>
 </body>
 </html>
